@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>小六數學 · 時間計算互動教學器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        :root {
+            --text: #1a1a1a;
+            --primary: #c96c3b;
+            --bg: #f5f2ed;
+            --paper: #fffaf2;
+        }
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            padding: 1rem;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        }
+        .card-paper { background-color: var(--paper); border: 3px solid var(--text); border-radius: 1.5rem; }
+        .pill-tab.active { background-color: var(--primary); color: white; }
+        .time-select { appearance: none; }
+        .action-btn { transition: all 0.2s ease; }
+        .action-btn:hover { transform: translateY(-3px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        .bar-shell { position: relative; width: 100%; background-color: #e0e0e0; height: 2rem; border-radius: 1rem; overflow: hidden; border: 2px solid var(--text); }
+        .bar-fill { position: absolute; left: 0; top: 0; bottom: 0; background-color: #5b8c5a; transition: width 0.3s ease; }
+        .bar-handle {
+            position: absolute;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background-color: white;
+            border: 3px solid var(--text);
+            cursor: grab;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+        /* [OPTIMIZATION] Adjusted the position of the time ticks to be closer to the bar */
+        .time-tick {
+            position: absolute;
+            bottom: -2rem; /* Was -2.5rem */
+            transform: translateX(-50%);
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-align: center;
+        }
+        [v-cloak] { display: none; }
+    </style>
+</head>
+<body>
+
+<div id="app" v-cloak>
+    <header class="card-paper p-5 md:p-8 mb-6">
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
+            <div>
+                <p class="inline-flex items-center gap-2 text-sm font-bold tracking-wide px-3 py-1 rounded-full bg-white/80 border-2 border-[color:var(--text)]"><i data-lucide="clock-3" class="w-4 h-4"></i> 小六數學 · 時間計算</p>
+                <h1 class="mt-3 text-3xl md:text-5xl font-black leading-tight">時間計算互動教學器</h1>
+                <p class="mt-3 text-base md:text-lg max-w-3xl leading-relaxed opacity-90">選擇題型，輸入條件，然後透過互動按鈕，一步步探索時間的計算奧秘。</p>
+            </div>
+        </div>
+    </header>
+
+    <main class="grid grid-cols-1 xl:grid-cols-[1.08fr_1fr] gap-6">
+        <section class="card-paper p-5 md:p-6">
+            <h2 class="text-2xl font-black mb-4">1. 輸入資料</h2>
+            
+            <div class="mb-5">
+                <div class="text-sm font-bold mb-2">選擇題型</div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <button @click="setMode('gap')" :class="{'active': mode === 'gap'}" class="pill-tab w-full rounded-2xl border-3 border-[color:var(--text)] bg-white px-4 py-3 text-left font-bold" type="button">開始 + 結束<br><span class="text-sm font-medium opacity-75">找 時間間隔</span></button>
+                    <button @click="setMode('end')" :class="{'active': mode === 'end'}" class="pill-tab w-full rounded-2xl border-3 border-[color:var(--text)] bg-white px-4 py-3 text-left font-bold" type="button">開始 + 間隔<br><span class="text-sm font-medium opacity-75">找 結束時間</span></button>
+                    <button @click="setMode('start')" :class="{'active': mode === 'start'}" class="pill-tab w-full rounded-2xl border-3 border-[color:var(--text)] bg-white px-4 py-3 text-left font-bold" type="button">結束 + 間隔<br><span class="text-sm font-medium opacity-75">找 開始時間</span></button>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5">
+                <!-- 開始時間 -->
+                <div class="card-paper p-4" :style="{ opacity: isStartDisabled ? 0.5 : 1 }">
+                    <label class="block text-sm font-bold mb-3">開始時間</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <select v-model="start.h" class="time-select w-full rounded-xl border-2 border-[color:var(--text)] bg-white px-3 py-3 font-semibold" :disabled="isStartDisabled">
+                            <option v-for="h in hourOptions(startFormat)" :value="h.value">{{ h.label }}</option>
+                        </select>
+                        <select v-model="start.m" class="time-select w-full rounded-xl border-2 border-[color:var(--text)] bg-white px-3 py-3 font-semibold" :disabled="isStartDisabled">
+                            <option v-for="m in 60" :value="m-1">{{ (m-1).toString().padStart(2, '0') }}</option>
+                        </select>
+                    </div>
+                    <div class="mt-3">
+                        <div class="grid grid-cols-2 gap-2">
+                           <label class="flex items-center gap-2 p-2 rounded-lg border-2" :class="startFormat === '24' ? 'bg-white border-black' : 'border-transparent'"><input type="radio" v-model="startFormat" value="24" class="accent-black" :disabled="isStartDisabled"> <span class="text-sm font-semibold">24小時制</span></label>
+                           <label class="flex items-center gap-2 p-2 rounded-lg border-2" :class="startFormat === '12' ? 'bg-white border-black' : 'border-transparent'"><input type="radio" v-model="startFormat" value="12" class="accent-black" :disabled="isStartDisabled"> <span class="text-sm font-semibold">12小時制</span></label>
+                        </div>
+                    </div>
+                </div>
+                <!-- 時間間隔 -->
+                <div class="card-paper p-4" :style="{ opacity: isDurationDisabled ? 0.5 : 1 }">
+                    <div class="block text-sm font-bold mb-3">時間間隔</div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <select v-model="duration.h" class="time-select w-full rounded-xl border-2 border-[color:var(--text)] bg-white px-3 py-3 font-semibold" :disabled="isDurationDisabled">
+                            <option v-for="h in 24" :value="h-1">{{ h-1 }} 小時</option>
+                        </select>
+                        <select v-model="duration.m" class="time-select w-full rounded-xl border-2 border-[color:var(--text)] bg-white px-3 py-3 font-semibold" :disabled="isDurationDisabled">
+                            <option v-for="m in 60" :value="m-1">{{ m-1 }} 分鐘</option>
+                        </select>
+                    </div>
+                </div>
+                <!-- 結束時間 -->
+                <div class="card-paper p-4" :style="{ opacity: isEndDisabled ? 0.5 : 1 }">
+                    <label class="block text-sm font-bold mb-3">結束時間</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <select v-model="end.h" class="time-select w-full rounded-xl border-2 border-[color:var(--text)] bg-white px-3 py-3 font-semibold" :disabled="isEndDisabled">
+                            <option v-for="h in hourOptions(endFormat)" :value="h.value">{{ h.label }}</option>
+                        </select>
+                        <select v-model="end.m" class="time-select w-full rounded-xl border-2 border-[color:var(--text)] bg-white px-3 py-3 font-semibold" :disabled="isEndDisabled">
+                            <option v-for="m in 60" :value="m-1">{{ (m-1).toString().padStart(2, '0') }}</option>
+                        </select>
+                    </div>
+                     <div class="mt-3">
+                        <div class="grid grid-cols-2 gap-2">
+                           <label class="flex items-center gap-2 p-2 rounded-lg border-2" :class="endFormat === '24' ? 'bg-white border-black' : 'border-transparent'"><input type="radio" v-model="endFormat" value="24" class="accent-black" :disabled="isEndDisabled"> <span class="text-sm font-semibold">24小時制</span></label>
+                           <label class="flex items-center gap-2 p-2 rounded-lg border-2" :class="endFormat === '12' ? 'bg-white border-black' : 'border-transparent'"><input type="radio" v-model="endFormat" value="12" class="accent-black" :disabled="isEndDisabled"> <span class="text-sm font-semibold">12小時制</span></label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card-paper p-4 mt-5">
+                <div class="text-sm font-bold mb-3"> 時間間隔顯示方式 </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <label class="flex items-center gap-3 rounded-2xl border-2 border-[color:var(--text)] px-4 py-3 bg-white cursor-pointer"><input type="radio" v-model="durationFormat" value="mixed" class="accent-black"> <span class="font-semibold">小時 + 分鐘</span></label>
+                    <label class="flex items-center gap-3 rounded-2xl border-2 border-[color:var(--text)] px-4 py-3 bg-white cursor-pointer"><input type="radio" v-model="durationFormat" value="decimal" class="accent-black"> <span class="font-semibold">小數</span></label>
+                    <label class="flex items-center gap-3 rounded-2xl border-2 border-[color:var(--text)] px-4 py-3 bg-white cursor-pointer"><input type="radio" v-model="durationFormat" value="fraction" class="accent-black"> <span class="font-semibold">分數</span></label>
+                </div>
+            </div>
+            
+            <div class="flex flex-wrap gap-3 mt-5">
+                <button @click="initialize" class="action-btn inline-flex items-center gap-2 rounded-2xl px-5 py-3 font-bold text-white border-3 border-[color:var(--text)]" style="background:var(--primary)"><i data-lucide="check-circle" class="w-5 h-5"></i> 確認資料</button>
+                 <button @click="resetAll" class="action-btn inline-flex items-center gap-2 rounded-2xl px-5 py-3 font-bold border-3 border-[color:var(--text)] bg-white"><i data-lucide="rotate-ccw" class="w-5 h-5"></i> 全部重設</button>
+            </div>
+            <div v-if="message" class="mt-4 rounded-2xl border-3 px-4 py-3 font-semibold" :class="message.type === 'error' ? 'border-red-500 bg-red-100 text-red-700' : 'border-[color:var(--text)] bg-white'">{{ message.text }}</div>
+        </section>
+
+        <section class="flex flex-col gap-6">
+            <div class="card-paper p-5 md:p-6">
+                 <h2 class="text-2xl font-black mb-4">2. 互動棒條動畫</h2>
+                
+                <div v-if="!isActive" class="text-center p-8 bg-gray-100 rounded-xl border-2 border-dashed"><p class="font-semibold text-gray-600">請先在左方確認資料</p></div>
+
+                <div v-if="isActive">
+                    <div class="grid grid-cols-3 gap-2 text-center mb-4">
+                        <div class="font-bold">開始<br>{{ formatTime(displayStart, startFormat) }}</div>
+                        <div class="font-bold">目前間隔<br>{{ formatDuration(currentMinutes - displayStart) }}</div>
+                        <div class="font-bold">結束<br>{{ formatTime(displayEnd, endFormat) }}</div>
+                    </div>
+                    
+                    <div class="relative pb-10">
+                        <div class="bar-shell">
+                            <div class="bar-fill" :style="{ width: barWidth + '%' }"></div>
+                        </div>
+                        <div class="bar-handle" :style="{ left: barWidth + '%' }" title="目前時間">
+                           <i data-lucide="clock-4" class="w-4 h-4 text-gray-700"></i>
+                        </div>
+                        <div v-for="tick in ticks" class="time-tick" :style="{ left: tick.pos + '%' }" v-html="tick.label"></div>
+                    </div>
+                    
+                     <div class="mt-4">
+                        <p class="text-sm font-bold text-center mb-2">{{ mode === 'start' ? '倒後跳轉' : '向前跳轉' }}</p>
+                        <div class="grid grid-cols-3 gap-3">
+                             <button @click="jump(60)" class="action-btn rounded-xl py-2 font-bold bg-white border-2 border-gray-400">{{ mode === 'start' ? '-' : '+' }} 1 小時</button>
+                             <button @click="jump(10)" class="action-btn rounded-xl py-2 font-bold bg-white border-2 border-gray-400">{{ mode === 'start' ? '-' : '+' }} 10 分鐘</button>
+                             <button @click="jump(1)" class="action-btn rounded-xl py-2 font-bold bg-white border-2 border-gray-400">{{ mode === 'start' ? '-' : '+' }} 1 分鐘</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card-paper p-5 md:p-6">
+                 <h2 class="text-2xl font-black mb-4">3. 結果與算式</h2>
+                 <div class="space-y-4">
+                    <div class="rounded-xl border-2 border-[color:var(--text)] bg-white p-4">
+                        <div class="text-sm font-bold opacity-70 mb-1">題目</div>
+                        <div class="text-lg font-bold">{{ questionText }}</div>
+                    </div>
+                    <div class="rounded-xl border-2 p-4" style="background:rgba(91,140,90,0.10); border-color: #5b8c5a;">
+                        <div class="text-sm font-bold opacity-70 mb-1">算式</div>
+                        <div class="text-lg font-black" v-html="equationText"></div>
+                    </div>
+                    <div class="rounded-xl border-2 p-4" style="background:rgba(201,108,59,0.12); border-color: var(--primary);">
+                        <div class="text-sm font-bold opacity-70 mb-1">答案</div>
+                        <div class="text-2xl font-black">{{ answerText }}</div>
+                    </div>
+                 </div>
+            </div>
+        </section>
+    </main>
+</div>
+
+<script src="https://unpkg.com/vue@3"></script>
+<script>
+    lucide.createIcons();
+    const { createApp, ref, computed, watch } = Vue;
+
+    createApp({
+        setup() {
+            const mode = ref('gap'); // gap, end, start
+            const start = ref({ h: 9, m: 30 });
+            const end = ref({ h: 11, m: 0 });
+            const duration = ref({ h: 1, m: 30 });
+            const startFormat = ref('24');
+            const endFormat = ref('24');
+            const durationFormat = ref('mixed');
+            
+            const message = ref(null);
+            const isActive = ref(false);
+
+            const displayStart = ref(0);
+            const displayEnd = ref(0);
+            const currentMinutes = ref(0);
+            const equationSteps = ref([]);
+
+            const isStartDisabled = computed(() => mode.value === 'start');
+            const isEndDisabled = computed(() => mode.value === 'end');
+            const isDurationDisabled = computed(() => mode.value === 'gap');
+            
+            const startInMinutes = computed(() => start.value.h * 60 + start.value.m);
+            const endInMinutes = computed(() => end.value.h * 60 + end.value.m);
+            const durationInMinutes = computed(() => duration.value.h * 60 + duration.value.m);
+            
+            function setMode(newMode) {
+                mode.value = newMode;
+                isActive.value = false;
+                message.value = null;
+            }
+            
+            function resetAll() {
+                mode.value = 'gap';
+                start.value = { h: 9, m: 30 };
+                end.value = { h: 11, m: 0 };
+                duration.value = { h: 1, m: 30 };
+                startFormat.value = '24';
+                endFormat.value = '24';
+                isActive.value = false;
+                message.value = null;
+            }
+
+            function initialize() {
+                message.value = null;
+                let calculated;
+                
+                try {
+                    const s = startInMinutes.value;
+                    let e = endInMinutes.value;
+                    if (mode.value === 'gap' && e < s) {
+                        e += 1440;
+                    }
+
+                    switch (mode.value) {
+                        case 'gap':
+                            calculated = e - s;
+                            if (calculated < 0) throw new Error('結束時間不能早於開始時間。');
+                            duration.value = { h: Math.floor(calculated / 60), m: calculated % 60 };
+                            displayStart.value = s;
+                            displayEnd.value = e;
+                            currentMinutes.value = s;
+                            break;
+                        case 'end':
+                            calculated = s + durationInMinutes.value;
+                            end.value = { h: Math.floor(calculated / 60) % 24, m: calculated % 60 };
+                            displayStart.value = s;
+                            displayEnd.value = calculated;
+                            currentMinutes.value = s;
+                            break;
+                        case 'start':
+                            calculated = e - durationInMinutes.value;
+                            if (calculated < 0) throw new Error('時間間隔過長，開始時間會是前一天。');
+                            start.value = { h: Math.floor(calculated / 60), m: calculated % 60 };
+                            displayStart.value = calculated;
+                            displayEnd.value = e;
+                            currentMinutes.value = e;
+                            break;
+                    }
+                    isActive.value = true;
+                    equationSteps.value = [];
+                } catch (e) {
+                    message.value = { text: e.message, type: 'error' };
+                    isActive.value = false;
+                }
+            }
+
+            function jump(minutes) {
+                const direction = mode.value === 'start' ? -1 : 1;
+                const target = currentMinutes.value + (minutes * direction);
+
+                if (direction === 1 && target <= displayEnd.value) {
+                    currentMinutes.value = target;
+                    equationSteps.value.push(minutes);
+                } else if (direction === -1 && target >= displayStart.value) {
+                    currentMinutes.value = target;
+                    equationSteps.value.push(minutes);
+                }
+            }
+            
+            const hourOptions = (format) => {
+                if (format === '12') {
+                    return Array.from({length: 24}, (_, i) => {
+                        const h12 = i % 12 === 0 ? 12 : i % 12;
+                        const period = i < 12 ? '上午' : '下午';
+                        return { value: i, label: `${period} ${h12}` };
+                    });
+                }
+                return Array.from({length: 24}, (_, i) => ({ value: i, label: i.toString().padStart(2, '0')}));
+            };
+
+            function formatTime(totalMinutes, format = '24') {
+                if (totalMinutes < 0) return '--:--';
+                const h24 = Math.floor(totalMinutes / 60) % 24;
+                const m = totalMinutes % 60;
+
+                if (format === '12') {
+                    const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+                    const period = h24 < 12 ? '上午' : '下午';
+                    return `${period} ${h12}:${m.toString().padStart(2, '0')}`;
+                }
+                return `${h24.toString().padStart(2,'0')}:${m.toString().padStart(2, '0')}`;
+            }
+
+            function toFraction(decimal) { if (decimal === 0) return "0";const gcd = (a, b) => b ? gcd(b, a % b) : a;const denominator = 60;const numerator = Math.round(decimal * denominator);const common = gcd(numerator, denominator);if (numerator/common === denominator/common) return "1";if (denominator/common === 1) return (numerator/common).toString();return `${numerator/common}/${denominator/common}`; }
+            function formatDuration(minutes, fmt = durationFormat.value) { if (minutes < 0 || isNaN(minutes)) minutes = 0; const h = Math.floor(minutes / 60); const m = minutes % 60; switch (fmt) { case 'decimal': return `${(minutes/60).toFixed(2)} 小時`; case 'fraction': const totalHours = Math.floor(minutes / 60); const remainingMinutes = minutes % 60; const fractionPart = toFraction(remainingMinutes / 60); if (totalHours > 0 && remainingMinutes > 0) return `${totalHours}又${fractionPart} 小時`; else if (totalHours > 0) return `${totalHours} 小時`; else if (remainingMinutes > 0) return `${fractionPart} 小時`; return "0 小時"; case 'mixed': default: if (h > 0 && m > 0) return `${h} 小時 ${m} 分鐘`; if (h > 0) return `${h} 小時`; return `${m} 分鐘`; } }
+
+            const barWidth = computed(() => { if (!isActive.value) return 0; const totalRange = displayEnd.value - displayStart.value; if (totalRange <= 0) return mode.value === 'start' ? 100 : 0; const progress = currentMinutes.value - displayStart.value; return Math.max(0, Math.min(100, (progress / totalRange) * 100)); });
+            
+            const ticks = computed(() => {
+                 if (!isActive.value) return [];
+                let points = [
+                    { pos: 0, label: formatTime(displayStart.value, startFormat.value) },
+                    { pos: 100, label: formatTime(displayEnd.value, endFormat.value) }
+                ];
+                if (barWidth.value > 15 && barWidth.value < 85) {
+                    const currentFormat = barWidth.value < 50 ? startFormat.value : endFormat.value;
+                    points.push({ pos: barWidth.value, label: formatTime(currentMinutes.value, currentFormat) });
+                }
+                return points;
+            });
+            
+            const questionText = computed(() => {
+                if (!isActive.value) return '請先在左方確認資料。';
+                const s = formatTime(startInMinutes.value, startFormat.value);
+                const e = formatTime(endInMinutes.value, endFormat.value);
+                const d = formatDuration(durationInMinutes.value, 'mixed');
+                switch(mode.value) {
+                    case 'gap': return `由 ${s} 至 ${e}，時間間隔是多少？`;
+                    case 'end': return `由 ${s} 開始，經過 ${d}，結束時間是？`;
+                    case 'start': return `在 ${e} 結束，需時 ${d}，開始時間是？`;
+                } return '';
+            });
+
+            const equationText = computed(() => {
+                 if (!isActive.value) return '--';
+                 const s = formatTime(startInMinutes.value, startFormat.value);
+                 const e = formatTime(endInMinutes.value, endFormat.value);
+                 switch(mode.value) {
+                    case 'gap': if (equationSteps.value.length === 0) return '按「跳轉」按鈕開始計算...'; return equationSteps.value.map(min => formatDuration(min, 'mixed')).join(' + ');
+                    case 'end': if (equationSteps.value.length === 0) return `${s} → ?`; return `${s} + ${equationSteps.value.map(min => formatDuration(min, 'mixed')).join(' + ')}`;
+                    case 'start': if (equationSteps.value.length === 0) return `${e} → ?`; return `${e} - ${equationSteps.value.map(min => formatDuration(min, 'mixed')).join(' - ')}`;
+                 } return '--';
+            });
+            
+            const answerText = computed(() => {
+                if (!isActive.value) return '--';
+                switch(mode.value) {
+                    // [BUG FIX] Directly calculate from display values to prevent NaN if duration ref is stale.
+                    case 'gap': return formatDuration(displayEnd.value - displayStart.value);
+                    case 'end': return formatTime(displayEnd.value, endFormat.value);
+                    case 'start': return formatTime(displayStart.value, startFormat.value);
+                } return '--';
+            });
+
+            return {
+                mode, start, end, duration, startFormat, endFormat, durationFormat, message, isActive,
+                setMode, initialize, resetAll, jump, hourOptions,
+                isStartDisabled, isEndDisabled, isDurationDisabled,
+                barWidth, ticks, questionText, equationText, answerText,
+                formatTime, formatDuration, displayStart, displayEnd, currentMinutes
+            };
+        }
+    }).mount('#app');
+</script>
+
+</body>
+</html>
